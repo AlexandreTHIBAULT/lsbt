@@ -1,5 +1,4 @@
 #include <unistd.h>
-#include <stdio.h>
 #include <stdlib.h> 
 #include <string.h>
 #include <time.h>
@@ -11,6 +10,7 @@
 #include <regex.h>   
 #include <sys/ioctl.h>
 #include <math.h>
+#include <stdio.h>
 
 void print_file(char* dir_name, struct stat sb);
 void get_mode(mode_t m, char* mode);
@@ -19,8 +19,13 @@ int hidden_filter(const struct dirent *dir);
 int get_term_width(void);
 int intlen(int n);
 void printspace(int n);
+int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file);
+int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file);
+void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file);
 
 char units[] = {' ', 'K', 'M', 'G', 'T'};
+
+char * folder_name = ".";
 
 void main(int argc, char** argv){
     DIR *d;
@@ -39,12 +44,13 @@ void main(int argc, char** argv){
     struct passwd *passwd;
     struct group *group;
 
-    char * folder_name = ".";
+    
 
+    int term_width = get_term_width();
     //printf("%d\n", get_term_width());
 
     switch(argc)
-    {
+    { 
     case 1:
         nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
         break;
@@ -111,75 +117,132 @@ void main(int argc, char** argv){
     //printf("%d %d %d %d \n", dim[0], dim[1], dim[2], dim[3]);
 
     nb_cur = nb_file;
-    while (nb_cur--) {
-        dir = dir_list[nb_file-nb_cur-1];
+    if(op_l){
+        while (nb_cur--) {
+            dir = dir_list[nb_file-nb_cur-1];
 
-        char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
-        sprintf(file_path, "%s/%s", folder_name, dir->d_name);
-        stat(file_path, &sb);
+            char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
+            sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+            stat(file_path, &sb);
 
-        if(op_l){
-            double file_size;
-            int unit = 0;
-            // Mode
-            get_mode(sb.st_mode, mode);
-            printf("\e[0;32m%s\e[0m ", mode);
+            if(op_l){
+                double file_size;
+                int unit = 0;
+                // Mode
+                get_mode(sb.st_mode, mode);
+                printf("\e[0;32m%s\e[0m ", mode);
 
-            // Link Count
-            printf("%ld ", (long) sb.st_nlink);
-            printspace(dim[0]-intlen(sb.st_nlink));
+                // Link Count
+                printf("%ld ", (long) sb.st_nlink);
+                printspace(dim[0]-intlen(sb.st_nlink));
 
-            // Ownership
-            passwd = getpwuid(sb.st_uid);
-            printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
-            printspace(dim[1]-strlen(passwd->pw_name));
+                // Ownership
+                passwd = getpwuid(sb.st_uid);
+                printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
+                printspace(dim[1]-strlen(passwd->pw_name));
 
-            group = getgrgid(sb.st_gid);
-            printf ("\e[0;33m%s\e[0m ", group->gr_name);
-            printspace(dim[2]-strlen(group->gr_name));
+                group = getgrgid(sb.st_gid);
+                printf ("\e[0;33m%s\e[0m ", group->gr_name);
+                printspace(dim[2]-strlen(group->gr_name));
 
-            //File size
-            file_size = (double) sb.st_size;
-            
-            printf("\e[0;35m");
-            if(op_h){
-                while(file_size>=1000.){
-                    file_size /= 1024;
-                    unit++;
-                }
+                //File size
+                file_size = (double) sb.st_size;
+                
+                printf("\e[0;35m");
+                if(op_h){
+                    while(file_size>=1000.){
+                        file_size /= 1024;
+                        unit++;
+                    }
 
-                if (file_size<10 && unit>0) {
-                    printf("%.1f %cB ", file_size, units[unit]);
-                }
-                else if(file_size<10){
-                    printf("%.1f B  ", file_size);
-                }
-                else if(unit>0) {
-                    printspace(3-intlen(file_size));
-                    printf("%.0f %cB ", file_size, units[unit]);
+                    if (file_size<10 && unit>0) {
+                        printf("%.1f %cB ", file_size, units[unit]);
+                    }
+                    else if(file_size<10){
+                        printf("%.1f B  ", file_size);
+                    }
+                    else if(unit>0) {
+                        printspace(3-intlen(file_size));
+                        printf("%.0f %cB ", file_size, units[unit]);
+                    }
+                    else {
+                        printspace(3-intlen(file_size));
+                        printf("%.0f B  ", file_size);
+                    }
                 }
                 else {
-                    printspace(3-intlen(file_size));
-                    printf("%.0f B  ", file_size);
+                    printspace(dim[3]-intlen(file_size));
+                    printf("%.0f ", file_size);
                 }
+                printf ("\e[0m ");
+
+                // Last modification
+                printf("%s ", strtok(ctime(&sb.st_mtime), "\n") );
+
+                // Name
+                print_file(dir->d_name, sb);
+
+                printf("\n");
             }
-            else {
-                printspace(dim[3]-intlen(file_size));
-                printf("%.0f ", file_size);
+            
+        }
+    }
+    else {
+        int line_width = 0;
+        while (nb_cur--) {
+            dir = dir_list[nb_file-nb_cur-1];
+            line_width += strlen(dir->d_name)+4;
+        }
+        line_width--;
+
+        //printf("%d/%d", line_width, term_width);
+
+        nb_cur = nb_file;
+        if (line_width<=term_width){
+            while (nb_cur--) {
+                dir = dir_list[nb_file-nb_cur-1];
+                char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
+                sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+                stat(file_path, &sb);
+                
+                print_file(dir->d_name, sb);
+                printf("  ");
             }
-            printf ("\e[0m");
-
-            // Last modification
-            printf("%s ", strtok(ctime(&sb.st_mtime), "\n") );
-
-            // Name
-            print_file(dir->d_name, sb);
-
-            printf("\n");
         }
         else {
-            print_file(dir->d_name, sb);
-            printf(" ");
+            int nb_c = ceil((double) nb_file/2.)+1;
+            int al_ok = 0;
+            int nb_line;
+            //printf("%d\n", nb_c);
+            while(!al_ok){
+                nb_c--;
+                al_ok=1;
+                nb_line = ceil((double)nb_file/(double)nb_c);
+                //printf("c=%d, l=%d\n", nb_c, nb_line);
+                while ( nb_c-(nb_line*nb_c-nb_file)<nb_c-1)
+                {
+                    nb_c--;
+                    nb_line = ceil((double)nb_file/(double)nb_c);
+                    //printf("c=%d, l=%d\n", nb_c, nb_line);
+                }
+                
+                /*
+                for(int i=0; i<nb_line; i++){
+                    al_ok = al_ok && (width_lines(dir_list, nb_c, nb_line, i, nb_file)<=term_width);
+                }*/
+                al_ok = (width_lines(dir_list, nb_c, nb_line, nb_file)<=term_width);
+            }
+            //printf("c=%d, l=%d\n", nb_c, nb_line);
+            int dim_c[nb_c];
+            for(int i=0; i<nb_c; i++){
+                dim_c[i] = width_column(dir_list, nb_c, nb_line, i, nb_file);
+                //printf("%d ", width_column(dir_list, nb_c, nb_line, i, nb_file));
+            }
+            //printf("\n");
+            for(int i=0; i<nb_line; i++){
+                print_line(dir_list, dim_c, nb_c, nb_line, i, nb_file);
+            }
+
         }
     }
 
@@ -191,46 +254,46 @@ void print_file(char* dir_name, struct stat sb){
         
         // Block
         case S_IFBLK:
-            printf("\e[33;40m%s\e[0m ", dir_name);
+            printf("\e[33;40m%s\e[0m", dir_name);
             break;
         // Char
         case S_IFCHR:
-            printf("\e[33;40m%s\e[0m ", dir_name);
+            printf("\e[33;40m%s\e[0m", dir_name);
             break;
         // Directory
         case S_IFDIR:
             if(regex_test(dir_name, "^(Downloads|Téléchargements)$") == 0)
-                printf("\e[34;1m󰉍 %s\e[0m ", dir_name);
+                printf("\e[34;1m󰉍 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^Documents$") == 0)
-                printf("\e[34;1m󰝰 %s\e[0m ", dir_name);
-            else if(regex_test(dir_name, "^Images$") == 0)
-                printf("\e[34;1m󰉏 %s\e[0m ", dir_name);
-            else if(regex_test(dir_name, "^(Models|Modèles)$") == 0)
-                printf("\e[34;1m󱋣 %s\e[0m ", dir_name);
+                printf("\e[34;1m󰝰 %s\e[0m", dir_name);
+            else if(regex_test(dir_name, "^Pictures|Images$") == 0)
+                printf("\e[34;1m󰉏 %s\e[0m", dir_name);
+            else if(regex_test(dir_name, "^(Templates|Modèles)$") == 0)
+                printf("\e[34;1m󱋣 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Videos|Vidéos)$") == 0)
-                printf("\e[34;1m󱧺 %s\e[0m ", dir_name);
+                printf("\e[34;1m󱧺 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Music|Musique)$") == 0)
-                printf("\e[34;1m󱍙 %s\e[0m ", dir_name);
+                printf("\e[34;1m󱍙 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Desktop|Bureau)$") == 0)
-                printf("\e[34;1m󱂵 %s\e[0m ", dir_name);
+                printf("\e[34;1m󱂵 %s\e[0m", dir_name);
             else
-                printf("\e[34;1m󰉋 %s\e[0m ", dir_name);
+                printf("\e[34;1m󰉋 %s\e[0m", dir_name);
             break;
         // FIFO
         case S_IFIFO:
-            printf("\e[33;40m%s\e[0m ", dir_name);
+            printf("\e[33;40m%s\e[0m", dir_name);
             break;
         // Symlink
         case S_IFLNK:
-            printf("\e[36;1m󰉒 %s\e[0m ", dir_name);
+            printf("\e[36;1m󰉒 %s\e[0m", dir_name);
             break;
         // Socket
         case S_IFSOCK:
-            printf("\e[35;1m%s\e[0m ", dir_name);
+            printf("\e[35;1m%s\e[0m", dir_name);
             break;
         // Regular file
         case S_IFREG:
-            if (sb.st_mode & S_IXUSR) printf("\e[32;1m󰆍 %s\e[33;0m ", dir_name);
+            if (sb.st_mode & S_IXUSR) printf("\e[32;1m󰆍 %s\e[33;0m", dir_name);
 /*
 LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;
 01:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;
@@ -251,50 +314,50 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
             else{
                 // Media files
                 if(regex_test(dir_name, "\\.(jpg|jpeg|gif|bmp|pbm|pgm|ppm|tga|xbm|xpm|tif|tiff|png|svg|svgz|mng|pcx)$") == 0)
-                    printf("\e[35;1m󰋩 %s\e[0m ", dir_name);
+                    printf("\e[35;1m󰋩 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(mov|mpg|mpeg|mkv|webm|ogm|mp4|m4v|mp4v)$") == 0)
-                    printf("\e[35;1m󰎁 %s\e[0m ", dir_name);
+                    printf("\e[35;1m󰎁 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(vob|qt|nuv|wmv|asf|rm|rmvb|flc|avi|fli|flv|gl|dl|xcf|xwd|yuv|cgm|emf|axv|anx|ogv|ogx)$") == 0)
-                    printf("\e[35;1m󰈔 %s\e[0m ", dir_name);
+                    printf("\e[35;1m󰈔 %s\e[0m", dir_name);
                 
                 // Compressed files
                 else if(regex_test(dir_name, "\\.(tar|tgz|arc|arj|taz|lha|lz4|lzh|lzma|tlz|txz|tzo|t7z|zip|z|Z|dz|gz|lrz|lz|lzo|xz|bz2|bz|tbz|tbz2|tz|deb|rpm|jar|war|ear|sar|rar|alz|ace|zoo|cpio|7z|rz|cab)$") == 0)
-                    printf("\e[01;31m󰈢 %s\e[0m ", dir_name);
+                    printf("\e[01;31m󰈢 %s\e[0m", dir_name);
 
                 // Audio files
                 else if(regex_test(dir_name, "\\.(aac|au|flac|mid|midi|mp3|mpc|ogg|ra|wav|axa|oga|spx|xspf)$") == 0)
-                    printf("\e[00;36m %s\e[0m ", dir_name);
+                    printf("\e[00;36m %s\e[0m", dir_name);
                 // PDF
                 else if(regex_test(dir_name, "\\.(pdf)$") == 0)
-                    printf("\e[0m󰈦 %s\e[0m ", dir_name);
+                    printf("\e[0m󰈦 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(py|ipynb|pyc)$") == 0)
-                    printf("\e[0m󰌠 %s\e[0m ", dir_name);
+                    printf("\e[0m󰌠 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(doc|docx)$") == 0)
-                    printf("\e[0m󰈬 %s\e[0m ", dir_name);
+                    printf("\e[0m󰈬 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(xls|xlsx|csv)$") == 0)
-                    printf("\e[0m󰓫 %s\e[0m ", dir_name);
+                    printf("\e[0m󰓫 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(txt)$") == 0)
-                    printf("\e[0m󰈙 %s\e[0m ", dir_name);
+                    printf("\e[0m󰈙 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(html)$") == 0)
-                    printf("\e[0m󰌝 %s\e[0m ", dir_name);
+                    printf("\e[0m󰌝 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(css|scss)$") == 0)
-                    printf("\e[0m󰌜 %s\e[0m ", dir_name);
+                    printf("\e[0m󰌜 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(c|h)$") == 0)
-                    printf("\e[0m󰙱 %s\e[0m ", dir_name);
+                    printf("\e[0m󰙱 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(cpp)$") == 0)
-                    printf("\e[0m󰙲 %s\e[0m ", dir_name);
+                    printf("\e[0m󰙲 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(cs)$") == 0)
-                    printf("\e[0m󰌛 %s\e[0m ", dir_name);
+                    printf("\e[0m󰌛 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(js)$") == 0)
-                    printf("\e[0m󰌞 %s\e[0m ", dir_name);
+                    printf("\e[0m󰌞 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(json)$") == 0)
-                    printf("\e[0m󰘦 %s\e[0m ", dir_name);
+                    printf("\e[0m󰘦 %s\e[0m", dir_name);
 
                 else if(regex_test(dir_name, "^makefile$") == 0)
-                    printf("\e[0m󰒓 %s\e[0m ", dir_name);
-                else if(regex_test(dir_name, "^README$") == 0)
-                    printf("\e[0m󰃀 %s\e[0m ", dir_name);
-                else printf("\e[0m󰈔 %s\e[0m ", dir_name);
+                    printf("\e[0m󰒓 %s\e[0m", dir_name);
+                else if(regex_test(dir_name, "^(README|README.md)$") == 0)
+                    printf("\e[0m󰃀 %s\e[0m", dir_name);
+                else printf("\e[0m󰈔 %s\e[0m", dir_name);
             }
             break;
         default:
@@ -370,4 +433,51 @@ void printspace(int n){
     for(int i=0; i<n; i++){
         printf(" ");
     }
+}
+
+int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file){
+    struct dirent *dir;
+    int line_width = 0;
+    int max_col = 0;
+    for(int i=0; i<nb_c; i++){
+        max_col = 0;
+        for(int j=0; j<nb_l; j++){
+            if((i*nb_l+j)<nb_file){
+                dir = dir_list[i*nb_l+j];
+                if(strlen(dir->d_name)>max_col) max_col = strlen(dir->d_name);
+            }
+        }
+        line_width += max_col+4;
+    }
+    line_width--;
+
+    return line_width;
+}
+int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file){
+    struct dirent *dir;
+    int col_width = 0;
+    for(int j=0; j<nb_l; j++){
+        if((j+nb_l*num_c)<nb_file){
+            dir = dir_list[j+nb_l*num_c];
+            if (strlen(dir->d_name)>col_width){
+                col_width = strlen(dir->d_name);
+            }
+        }
+    }
+    return col_width+4;
+}
+void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file){
+    struct dirent *dir;
+    struct stat sb;
+    for(int i=0; i<nb_c; i++){
+        if((i*nb_l+num_l)<nb_file){
+            dir = dir_list[i*nb_l+num_l];
+            char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
+            sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+            stat(file_path, &sb);
+            print_file(dir->d_name, sb);
+            if(i<(nb_c-1)) printspace(dim_c[i]-strlen(dir->d_name)-2);
+        }
+    }
+    printf("\n");
 }
