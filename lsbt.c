@@ -10,10 +10,13 @@
 #include <regex.h>   
 #include <sys/ioctl.h>
 #include <math.h>
+#include <wchar.h>
+#include <locale.h>
+#include <limits.h>
 #include <stdio.h>
 
 void print_file(char* dir_name, struct stat sb);
-void get_mode(mode_t m, char* mode);
+void print_mode(mode_t m, char* mode);
 int regex_test(char * string, char * reg);
 int hidden_filter(const struct dirent *dir);
 int get_term_width(void);
@@ -23,11 +26,17 @@ int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file);
 int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file);
 void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file);
 
+size_t mbStrlen( const char * str );
+
 char units[] = {' ', 'K', 'M', 'G', 'T'};
 
 char * folder_name = ".";
 
+int op_a = 0, op_l = 0, op_h = 0;
+
 void main(int argc, char** argv){
+    setlocale( LC_ALL, "en_US.utf8" ); 
+    
     DIR *d;
     struct dirent *dir;
     struct dirent **dir_list;
@@ -36,15 +45,11 @@ void main(int argc, char** argv){
     int nbPattern = 0;
     int i;
 
-    int op_a = 0, op_l = 0, op_h = 0;
-
     char mode[11] = {};
 
     struct stat sb;
     struct passwd *passwd;
     struct group *group;
-
-    
 
     int term_width = get_term_width();
     //printf("%d\n", get_term_width());
@@ -99,18 +104,18 @@ void main(int argc, char** argv){
     int dim[4] = {0, 0, 0, 0};
     while (nb_cur--) {
         dir = dir_list[nb_file-nb_cur-1];
-
+        
         char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
         sprintf(file_path, "%s/%s", folder_name, dir->d_name);
-        stat(file_path, &sb);
+        lstat(file_path, &sb);
 
         if (intlen(sb.st_nlink)>dim[0]) dim[0] = intlen(sb.st_nlink);
 
         passwd = getpwuid(sb.st_uid);  
-        if (strlen(passwd->pw_name)>dim[1]) dim[1] = strlen(passwd->pw_name);
+        if (mbStrlen(passwd->pw_name)>dim[1]) dim[1] = mbStrlen(passwd->pw_name);
 
         group = getgrgid(sb.st_gid);
-        if (strlen(group->gr_name)>dim[2]) dim[2] = strlen(group->gr_name);
+        if (mbStrlen(group->gr_name)>dim[2]) dim[2] = mbStrlen(group->gr_name);
 
         if (intlen(sb.st_size)>dim[3]) dim[3] = intlen(sb.st_size);
     }
@@ -120,17 +125,18 @@ void main(int argc, char** argv){
     if(op_l){
         while (nb_cur--) {
             dir = dir_list[nb_file-nb_cur-1];
-
+            
             char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
+            
             sprintf(file_path, "%s/%s", folder_name, dir->d_name);
-            stat(file_path, &sb);
+            lstat(file_path, &sb);
 
             if(op_l){
                 double file_size;
                 int unit = 0;
                 // Mode
-                get_mode(sb.st_mode, mode);
-                printf("\e[0;32m%s\e[0m ", mode);
+                print_mode(sb.st_mode, mode);
+                //printf("%s ", mode);
 
                 // Link Count
                 printf("%ld ", (long) sb.st_nlink);
@@ -139,11 +145,11 @@ void main(int argc, char** argv){
                 // Ownership
                 passwd = getpwuid(sb.st_uid);
                 printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
-                printspace(dim[1]-strlen(passwd->pw_name));
+                printspace(dim[1]-mbStrlen(passwd->pw_name));
 
                 group = getgrgid(sb.st_gid);
                 printf ("\e[0;33m%s\e[0m ", group->gr_name);
-                printspace(dim[2]-strlen(group->gr_name));
+                printspace(dim[2]-mbStrlen(group->gr_name));
 
                 //File size
                 file_size = (double) sb.st_size;
@@ -191,7 +197,7 @@ void main(int argc, char** argv){
         int line_width = 0;
         while (nb_cur--) {
             dir = dir_list[nb_file-nb_cur-1];
-            line_width += strlen(dir->d_name)+4;
+            line_width += mbStrlen(dir->d_name)+4;
         }
         line_width--;
 
@@ -203,7 +209,7 @@ void main(int argc, char** argv){
                 dir = dir_list[nb_file-nb_cur-1];
                 char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
                 sprintf(file_path, "%s/%s", folder_name, dir->d_name);
-                stat(file_path, &sb);
+                lstat(file_path, &sb);
                 
                 print_file(dir->d_name, sb);
                 printf("  ");
@@ -286,6 +292,20 @@ void print_file(char* dir_name, struct stat sb){
         // Symlink
         case S_IFLNK:
             printf("\e[36;1m󰉒 %s\e[0m", dir_name);
+            if(op_l){
+                printf(" 󰜴 ");
+
+                char buf[PATH_MAX];
+                char * file_path =malloc((strlen(folder_name)+strlen(dir_name)+2)*sizeof(char));
+                sprintf(file_path, "%s/%s", folder_name, dir_name);
+                char *res = realpath(file_path, buf);
+                
+                if (res) { // or: if (res != NULL)
+                    stat(buf, &sb);
+                    print_file(buf, sb);
+                }
+                //stat(file_path, &sb);
+            }
             break;
         // Socket
         case S_IFSOCK:
@@ -366,37 +386,39 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
     }
 }
 
-void get_mode(mode_t m, char* mode)//Permission
+void print_mode(mode_t m, char* mode)//Permission
 {
     if(S_ISREG(m))
-        strcpy(mode,"-");
+        printf("-");
     else if(S_ISDIR(m))
-        strcpy(mode,"d");
+        printf("\e[34;1md\e[0m");
     else if(S_ISCHR(m))
-        strcpy(mode,"c");
+        printf("\e[33;40mc\e[0m");
     else if(S_ISBLK(m))
-        strcpy(mode,"b");
+        printf("\e[33;40mb\e[0m");
     else if(S_ISFIFO(m))
-        strcpy(mode,"f");
+        printf("\e[33;40mf\e[0m");
     else if(S_ISLNK(m))
-        strcpy(mode,"l");
+        printf("\e[36;1ml\e[0m");
     else if(S_ISSOCK(m))
-        strcpy(mode,"n");
+        printf("\e[35;1mn\e[0m");
 
     // users
-    strcat(mode,m&S_IRUSR?"r":"-");
-    strcat(mode,m&S_IWUSR?"w":"-");
-    strcat(mode,m&S_IXUSR?"x":"-");
+    printf(m&S_IRUSR?"\e[32;1mr\e[0m":"-");
+    printf(m&S_IWUSR?"\e[32;1mw\e[0m":"-");
+    printf(m&S_IXUSR?"\e[32;1mx\e[0m":"-");
 
     // group
-    strcat(mode,m&S_IRGRP?"r":"-");
-    strcat(mode,m&S_IWGRP?"w":"-");
-    strcat(mode,m&S_IXGRP?"x":"-");
+    printf(m&S_IRGRP?"\e[32;1mr\e[0m":"-");
+    printf(m&S_IWGRP?"\e[32;1mw\e[0m":"-");
+    printf(m&S_IXGRP?"\e[32;1mx\e[0m":"-");
 
     //Other
-    strcat(mode,m&S_IROTH?"r":"-");
-    strcat(mode,m&S_IWOTH?"w":"-");
-    strcat(mode,m&S_IXOTH?"x":"-");
+    printf(m&S_IROTH?"\e[32;1mr\e[0m":"-");
+    printf(m&S_IWOTH?"\e[32;1mw\e[0m":"-");
+    printf(m&S_IXOTH?"\e[32;1mx\e[0m":"-");
+
+    printf(" ");
 }
 
 int regex_test(char * string, char * reg){
@@ -444,7 +466,7 @@ int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file){
         for(int j=0; j<nb_l; j++){
             if((i*nb_l+j)<nb_file){
                 dir = dir_list[i*nb_l+j];
-                if(strlen(dir->d_name)>max_col) max_col = strlen(dir->d_name);
+                if(mbStrlen(dir->d_name)>max_col) max_col = mbStrlen(dir->d_name);
             }
         }
         line_width += max_col+4;
@@ -459,8 +481,8 @@ int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb
     for(int j=0; j<nb_l; j++){
         if((j+nb_l*num_c)<nb_file){
             dir = dir_list[j+nb_l*num_c];
-            if (strlen(dir->d_name)>col_width){
-                col_width = strlen(dir->d_name);
+            if (mbStrlen(dir->d_name)>col_width){
+                col_width = mbStrlen(dir->d_name);
             }
         }
     }
@@ -474,10 +496,42 @@ void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int n
             dir = dir_list[i*nb_l+num_l];
             char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
             sprintf(file_path, "%s/%s", folder_name, dir->d_name);
-            stat(file_path, &sb);
+            lstat(file_path, &sb);
             print_file(dir->d_name, sb);
-            if(i<(nb_c-1)) printspace(dim_c[i]-strlen(dir->d_name)-2);
+            if(i<(nb_c-1)) printspace(dim_c[i]-mbStrlen(dir->d_name)-2);
         }
     }
     printf("\n");
+}
+
+
+size_t mbStrlen( const char * str ) {
+
+    size_t result = 0;
+    int nbChars;
+    wchar_t extractedChar;
+
+    // Si mblen renvoi 0, alors on est arrivé à la fin de la chaîne
+    while( ( nbChars = mblen( str, MB_CUR_MAX ) ) ) {
+
+        // Si mblen renvoi -1, alors il y a eut une erreur durant le décodage de la chaîne.
+        if ( nbChars == -1 ) {
+            fprintf( stderr, "On ne peut pas décoder la chaîne.\n" );
+            fprintf( stderr, "Vérifiez votre localisation (fonction setlocale).\n" );
+            exit( -1 );
+        }
+
+        // On extrait le caractère multi-octets dans un caractère long (wide char) de type
+        // wchar_t pour facilement le prendre en charge dans la fonction printf.
+        mbtowc( &extractedChar, str, nbChars );
+
+        // On affiche le caractère et sa taille en nombre d'octets
+        //printf( "%lc -> %d \n", extractedChar, nbChars );
+
+        // On passe au caractère suivant
+        str += nbChars;
+        result ++;
+    }
+
+    return result;
 }
