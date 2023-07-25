@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <unistd.h>
 #include <stdlib.h> 
 #include <string.h>
@@ -15,8 +16,10 @@
 #include <limits.h>
 #include <stdio.h>
 
+void lsbt_folder(char * folder_name, int print_name);
 void print_file(char* dir_name, struct stat sb);
-void print_mode(mode_t m, char* mode);
+void print_file_data(char* dir_name, struct stat sb, int dim[]);
+void print_mode(mode_t m);
 int regex_test(char * string, char * reg);
 int hidden_filter(const struct dirent *dir);
 int get_term_width(void);
@@ -30,82 +33,115 @@ size_t mbStrlen( const char * str );
 
 char units[] = {' ', 'K', 'M', 'G', 'T'};
 
-char * folder_name = ".";
+char * folder_cur;
 
 int op_a = 0, op_l = 0, op_h = 0;
+int term_width;
 
 void main(int argc, char** argv){
-    setlocale( LC_ALL, "en_US.utf8" ); 
-    
-    DIR *d;
-    struct dirent *dir;
-    struct dirent **dir_list;
-    int nb_file, nb_cur;
-    FILE * f;
-    int nbPattern = 0;
-    int i;
+    char * folders_id = "";
+    int nb_folder = 0;
 
-    char mode[11] = {};
+    setlocale( LC_ALL, "en_US.utf8" );
 
-    struct stat sb;
-    struct passwd *passwd;
-    struct group *group;
-
-    int term_width = get_term_width();
+    term_width = get_term_width();
     //printf("%d\n", get_term_width());
 
-    switch(argc)
-    { 
-    case 1:
-        nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
-        break;
-    default:
-        if (argv[1][0] == '-'){
-            if (argc>2) folder_name = argv[2];
+    for(int i=1; i<argc; i++){
+        if (argv[i][0] == '-'){
+            //if (argc>2) folder_name = argv[2];
 
-			char *p = (char*)(argv[1] + 1);
-			while(*p){
-				if(*p == 'a'){
+            char *p = (char*)(argv[i] + 1);
+            while(*p){
+                if(*p == 'a'){
                     op_a = 1;
                 }
-				else if(*p == 'l'){
+                else if(*p == 'l'){
                     op_l = 1;
                 }
                 else if(*p == 'h'){
                     op_h = 1;
                 }
-				else{
-					perror("Option not available");
-					exit(EXIT_FAILURE);
-				}
-				p++;
-			}
-			if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
-            else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
+                else{
+                    perror("Option not available");
+                    exit(EXIT_FAILURE);
+                }
+                p++;
+            }
+            //if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
+            //else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
             
-		} else {
-            folder_name = argv[1];
-            nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
+        } else {
+            //folder_name = argv[i];
+            asprintf(&folders_id, "%s%c", folders_id, (char) i);
+            //strcat(folders_id, (char) i);
+            nb_folder ++;
+            //nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
         }
-
-        break;
     }
+    //printf("%s : %d\n", folders_id, nb_folder);
+    if(nb_folder == 0){
+        lsbt_folder(".", 0);
+    }
+    else if (nb_folder == 1){
+        lsbt_folder(argv[(int)folders_id[0]], 0);
+    }
+    else {
+        for(int i=0; i<nb_folder; i++){
+            //printf("%s:\n", argv[(int)folders_id[i]]);
+            lsbt_folder(argv[(int)folders_id[i]], 1);
+        }
+    }
+}
+
+void lsbt_folder(char * folder_name, int print_name){
+    struct dirent *dir;
+    struct dirent **dir_list;
+    struct passwd *passwd;
+    struct group *group;
+    int nb_file, nb_cur;
+
+    struct stat sb;
+
+    int dim[4] = {0, 0, 0, 0};
+
+    folder_cur = folder_name;
+
+    stat(folder_name, &sb);
+    if(!S_ISDIR(sb.st_mode)){
+        if(op_l){
+            print_file_data(folder_name, sb, dim);
+            printf("\n");
+        }
+        else{
+            print_file(folder_name, sb);
+            printf("\n\n");
+        }
+        
+        return;
+    }
+
+    if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
+    else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
 
     //nb_file = scandir(".", &dir_list, hidden_filter, alphasort);
     if (nb_file == -1) {
         perror("lsbt");
         exit(EXIT_FAILURE);
     }
+
     nb_cur = nb_file;
+
+    if(print_name) printf("%s:\n", folder_name);
 
     /*
         Get listed format dimensions for formatting
     */
-    int dim[4] = {0, 0, 0, 0};
+    
     while (nb_cur--) {
         dir = dir_list[nb_file-nb_cur-1];
         
-        char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
+        char * file_path = malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
         sprintf(file_path, "%s/%s", folder_name, dir->d_name);
         lstat(file_path, &sb);
 
@@ -132,65 +168,8 @@ void main(int argc, char** argv){
             lstat(file_path, &sb);
 
             if(op_l){
-                double file_size;
-                int unit = 0;
-                // Mode
-                print_mode(sb.st_mode, mode);
-                //printf("%s ", mode);
-
-                // Link Count
-                printf("%ld ", (long) sb.st_nlink);
-                printspace(dim[0]-intlen(sb.st_nlink));
-
-                // Ownership
-                passwd = getpwuid(sb.st_uid);
-                printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
-                printspace(dim[1]-mbStrlen(passwd->pw_name));
-
-                group = getgrgid(sb.st_gid);
-                printf ("\e[0;33m%s\e[0m ", group->gr_name);
-                printspace(dim[2]-mbStrlen(group->gr_name));
-
-                //File size
-                file_size = (double) sb.st_size;
-                
-                printf("\e[0;35m");
-                if(op_h){
-                    while(file_size>=1000.){
-                        file_size /= 1024;
-                        unit++;
-                    }
-
-                    if (file_size<10 && unit>0) {
-                        printf("%.1f %cB ", file_size, units[unit]);
-                    }
-                    else if(file_size<10){
-                        printf("%.1f B  ", file_size);
-                    }
-                    else if(unit>0) {
-                        printspace(3-intlen(file_size));
-                        printf("%.0f %cB ", file_size, units[unit]);
-                    }
-                    else {
-                        printspace(3-intlen(file_size));
-                        printf("%.0f B  ", file_size);
-                    }
-                }
-                else {
-                    printspace(dim[3]-intlen(file_size));
-                    printf("%.0f ", file_size);
-                }
-                printf ("\e[0m ");
-
-                // Last modification
-                printf("%s ", strtok(ctime(&sb.st_mtime), "\n") );
-
-                // Name
-                print_file(dir->d_name, sb);
-
-                printf("\n");
+                print_file_data(dir->d_name, sb, dim);
             }
-            
         }
     }
     else {
@@ -214,6 +193,7 @@ void main(int argc, char** argv){
                 print_file(dir->d_name, sb);
                 printf("  ");
             }
+            printf("\n");
         }
         else {
             int nb_c = ceil((double) nb_file/2.)+1;
@@ -252,7 +232,7 @@ void main(int argc, char** argv){
         }
     }
 
-    if(!op_l) printf("\n");
+    printf("\n");
 }
 
 void print_file(char* dir_name, struct stat sb){
@@ -260,15 +240,24 @@ void print_file(char* dir_name, struct stat sb){
         
         // Block
         case S_IFBLK:
-            printf("\e[33;40m%s\e[0m", dir_name);
+            printf("\e[33;40m󰜫 %s\e[0m", dir_name);
             break;
         // Char
         case S_IFCHR:
-            printf("\e[33;40m%s\e[0m", dir_name);
+            printf("\e[33;40m󰦨 %s\e[0m", dir_name);
             break;
         // Directory
         case S_IFDIR:
-            if(regex_test(dir_name, "^(Downloads|Téléchargements)$") == 0)
+            //m&S_IXOTH?"\e[32;1mx\e[0m":"-"
+            if(sb.st_mode & S_IWOTH){
+                if(sb.st_mode & S_ISVTX)
+                    printf("\e[30;42m󰉋 %s\e[0m", dir_name);
+                else
+                    printf("\e[34;42m󰉋 %s\e[0m", dir_name);
+            }
+            else if(sb.st_mode & S_ISVTX)
+                printf("\e[37;44m󰉋 %s\e[0m", dir_name);
+            else if(regex_test(dir_name, "^(Downloads|Téléchargements)$") == 0)
                 printf("\e[34;1m󰉍 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^Documents$") == 0)
                 printf("\e[34;1m󰝰 %s\e[0m", dir_name);
@@ -287,29 +276,34 @@ void print_file(char* dir_name, struct stat sb){
             break;
         // FIFO
         case S_IFIFO:
-            printf("\e[33;40m%s\e[0m", dir_name);
+            printf("\e[33;40m󰈲 %s\e[0m", dir_name);
             break;
         // Symlink
         case S_IFLNK:
-            printf("\e[36;1m󰉒 %s\e[0m", dir_name);
-            if(op_l){
-                printf(" 󰜴 ");
-
-                char buf[PATH_MAX];
-                char * file_path =malloc((strlen(folder_name)+strlen(dir_name)+2)*sizeof(char));
-                sprintf(file_path, "%s/%s", folder_name, dir_name);
-                char *res = realpath(file_path, buf);
-                
-                if (res) { // or: if (res != NULL)
-                    stat(buf, &sb);
-                    print_file(buf, sb);
+            
+            //char buf[PATH_MAX];
+            char * file_path =malloc((strlen(folder_cur)+strlen(dir_name)+2)*sizeof(char));
+            sprintf(file_path, "%s/%s", folder_cur, dir_name);
+            char *res = realpath(file_path, NULL);
+            struct stat sb2;
+            if (res) { // or: if (res != NULL)
+                //printf("%s", res);
+                printf("\e[36;1m󰉒 %s\e[0m", dir_name);
+                if(op_l){
+                    printf(" 󰜴 ");
+                    stat(res, &sb2);
+                    print_file(res, sb2);
                 }
-                //stat(file_path, &sb);
             }
+            else {
+                printf("\e[40;31;01m󰉒 %s\e[0m", dir_name);
+            }
+            //stat(file_path, &sb);
+            
             break;
         // Socket
         case S_IFSOCK:
-            printf("\e[35;1m%s\e[0m", dir_name);
+            printf("\e[35;1m󰆨 %s\e[0m", dir_name);
             break;
         // Regular file
         case S_IFREG:
@@ -342,7 +336,7 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
                 
                 // Compressed files
                 else if(regex_test(dir_name, "\\.(tar|tgz|arc|arj|taz|lha|lz4|lzh|lzma|tlz|txz|tzo|t7z|zip|z|Z|dz|gz|lrz|lz|lzo|xz|bz2|bz|tbz|tbz2|tz|deb|rpm|jar|war|ear|sar|rar|alz|ace|zoo|cpio|7z|rz|cab)$") == 0)
-                    printf("\e[01;31m󰈢 %s\e[0m", dir_name);
+                    printf("\e[01;31m󰀼 %s\e[0m", dir_name);
 
                 // Audio files
                 else if(regex_test(dir_name, "\\.(aac|au|flac|mid|midi|mp3|mpc|ogg|ra|wav|axa|oga|spx|xspf)$") == 0)
@@ -381,13 +375,75 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
             }
             break;
         default:
-            printf("unknown? ");
+            printf("lsbt: %s: No such file or directory", dir_name);
             break;
     }
 }
 
-void print_mode(mode_t m, char* mode)//Permission
-{
+void print_file_data(char* dir_name, struct stat sb, int dim[]){
+    double file_size;
+    int unit = 0;
+    struct passwd *passwd;
+    struct group *group;
+
+    // Mode
+    print_mode(sb.st_mode);
+    //printf("%s ", mode);
+
+    // Link Count
+    printf("%ld ", (long) sb.st_nlink);
+    printspace(dim[0]-intlen(sb.st_nlink));
+
+    // Ownership
+    passwd = getpwuid(sb.st_uid);
+    printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
+    printspace(dim[1]-mbStrlen(passwd->pw_name));
+
+    group = getgrgid(sb.st_gid);
+    printf ("\e[0;33m%s\e[0m ", group->gr_name);
+    printspace(dim[2]-mbStrlen(group->gr_name));
+
+    //File size
+    file_size = (double) sb.st_size;
+    
+    printf("\e[0;35m");
+    if(op_h){
+        while(file_size>=1000.){
+            file_size /= 1024;
+            unit++;
+        }
+
+        if (file_size<10 && unit>0) {
+            printf("%.1f %cB", file_size, units[unit]);
+        }
+        else if(file_size<10){
+            printf("%.1f B ", file_size);
+        }
+        else if(unit>0) {
+            printspace(3-intlen(file_size));
+            printf("%.0f %cB", file_size, units[unit]);
+        }
+        else {
+            printspace(3-intlen(file_size));
+            printf("%.0f B ", file_size);
+        }
+    }
+    else {
+        printspace(dim[3]-intlen(file_size));
+        printf("%.0f", file_size);
+    }
+    printf ("\e[0m ");
+
+    // Last modification
+    printf("%s ", strtok(ctime(&sb.st_mtime), "\n") );
+
+    // Name
+    print_file(dir_name, sb);
+
+    printf("\n");
+}
+
+void print_mode(mode_t m){
     if(S_ISREG(m))
         printf("-");
     else if(S_ISDIR(m))
@@ -397,11 +453,11 @@ void print_mode(mode_t m, char* mode)//Permission
     else if(S_ISBLK(m))
         printf("\e[33;40mb\e[0m");
     else if(S_ISFIFO(m))
-        printf("\e[33;40mf\e[0m");
+        printf("\e[33;40mp\e[0m");
     else if(S_ISLNK(m))
         printf("\e[36;1ml\e[0m");
     else if(S_ISSOCK(m))
-        printf("\e[35;1mn\e[0m");
+        printf("\e[35;1ms\e[0m");
 
     // users
     printf(m&S_IRUSR?"\e[32;1mr\e[0m":"-");
@@ -416,8 +472,18 @@ void print_mode(mode_t m, char* mode)//Permission
     //Other
     printf(m&S_IROTH?"\e[32;1mr\e[0m":"-");
     printf(m&S_IWOTH?"\e[32;1mw\e[0m":"-");
-    printf(m&S_IXOTH?"\e[32;1mx\e[0m":"-");
+    if(m&S_IXOTH){
+        if(m&S_ISVTX)
+            printf("\e[32;1mt\e[0m");
+        else
+            printf("\e[32;1mx\e[0m");
+    } else if(m&S_ISVTX)
+        printf("\e[32;1mT\e[0m");
+    else
+        printf("-");
 
+//            if(sb.st_mode &S_IWOTH){
+//                if(sb.st_mode &S_ISVTX)
     printf(" ");
 }
 
@@ -448,6 +514,7 @@ int get_term_width(void){
 }
 
 int intlen(int n){
+    if (n==0) return 1;
     return floor(log10((double) abs(n))) + 1;
 }
 
@@ -475,6 +542,7 @@ int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file){
 
     return line_width;
 }
+
 int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file){
     struct dirent *dir;
     int col_width = 0;
@@ -488,14 +556,16 @@ int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb
     }
     return col_width+4;
 }
+
 void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file){
     struct dirent *dir;
     struct stat sb;
     for(int i=0; i<nb_c; i++){
         if((i*nb_l+num_l)<nb_file){
             dir = dir_list[i*nb_l+num_l];
-            char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
-            sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+            char * file_path =malloc((strlen(folder_cur)+strlen(dir->d_name)+2)*sizeof(char));
+            sprintf(file_path, "%s/%s", folder_cur, dir->d_name);
+            //printf("\n--%s--\n",file_path);
             lstat(file_path, &sb);
             print_file(dir->d_name, sb);
             if(i<(nb_c-1)) printspace(dim_c[i]-mbStrlen(dir->d_name)-2);
@@ -503,7 +573,6 @@ void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int n
     }
     printf("\n");
 }
-
 
 size_t mbStrlen( const char * str ) {
 
