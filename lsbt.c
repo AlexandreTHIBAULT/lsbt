@@ -1,20 +1,4 @@
-#define _GNU_SOURCE
-#include <unistd.h>
-#include <stdlib.h> 
-#include <string.h>
-#include <time.h>
-#include <dirent.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <pwd.h>
-#include <grp.h>
-#include <regex.h>   
-#include <sys/ioctl.h>
-#include <math.h>
-#include <wchar.h>
-#include <locale.h>
-#include <limits.h>
-#include <stdio.h>
+#include "lsbt_colors.h"
 
 void lsbt_folder(char * folder_name, int print_name);
 void print_file(char* dir_name, struct stat sb);
@@ -28,28 +12,34 @@ void printspace(int n);
 int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file);
 int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file);
 void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file);
-
 size_t mbStrlen( const char * str );
 
+// Units to write for list format
 char units[] = {' ', 'K', 'M', 'G', 'T'};
 
 char * folder_cur;
 
+// Var for command options
 int op_a = 0, op_l = 0, op_h = 0;
+
 int term_width;
+
+// Colors of file's types for theming
+lsbt_colors colors;
 
 void main(int argc, char** argv){
     char * folders_id = "";
-    int nb_folder = 0;
+    int nb_folder = 0; // Number of folders to list
 
     setlocale( LC_ALL, "en_US.utf8" );
 
     term_width = get_term_width();
-    //printf("%d\n", get_term_width());
+    colors = get_colors();
 
+    // Reading the options of the command
     for(int i=1; i<argc; i++){
-        if (argv[i][0] == '-'){
-            //if (argc>2) folder_name = argv[2];
+        
+        if (argv[i][0] == '-'){ // If there is an option
 
             char *p = (char*)(argv[i] + 1);
             while(*p){
@@ -63,37 +53,34 @@ void main(int argc, char** argv){
                     op_h = 1;
                 }
                 else{
-                    perror("Option not available");
+                    printf("-%c: Option not available", *p);
                     exit(EXIT_FAILURE);
                 }
                 p++;
             }
-            //if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
-            //else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
             
-        } else {
-            //folder_name = argv[i];
+        } else { // If there is a file or folder name
             asprintf(&folders_id, "%s%c", folders_id, (char) i);
-            //strcat(folders_id, (char) i);
             nb_folder ++;
-            //nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
         }
     }
-    //printf("%s : %d\n", folders_id, nb_folder);
-    if(nb_folder == 0){
+
+    if(nb_folder == 0){ // If no folder is past, process the current one
         lsbt_folder(".", 0);
     }
-    else if (nb_folder == 1){
+    else if (nb_folder == 1){ // If one folder is past, process it
         lsbt_folder(argv[(int)folders_id[0]], 0);
     }
-    else {
+    else { // Else, process all the folders and write their names
         for(int i=0; i<nb_folder; i++){
-            //printf("%s:\n", argv[(int)folders_id[i]]);
             lsbt_folder(argv[(int)folders_id[i]], 1);
         }
     }
+
+    free(folders_id);
 }
 
+// List the folder
 void lsbt_folder(char * folder_name, int print_name){
     struct dirent *dir;
     struct dirent **dir_list;
@@ -107,7 +94,11 @@ void lsbt_folder(char * folder_name, int print_name){
 
     folder_cur = folder_name;
 
-    stat(folder_name, &sb);
+    if(stat(folder_name, &sb)==-1){
+        perror(folder_name);
+        printf("\n");
+        return;
+    }
     if(!S_ISDIR(sb.st_mode)){
         if(op_l){
             print_file_data(folder_name, sb, dim);
@@ -240,43 +231,44 @@ void print_file(char* dir_name, struct stat sb){
         
         // Block
         case S_IFBLK:
-            printf("\e[33;40m󰜫 %s\e[0m", dir_name);
+            printf("\e[%sm󰜫 %s\e[0m", colors.blk, dir_name);
             break;
         // Char
         case S_IFCHR:
-            printf("\e[33;40m󰦨 %s\e[0m", dir_name);
+            printf("\e[%sm󰦨 %s\e[0m", colors.chara, dir_name);
             break;
         // Directory
         case S_IFDIR:
+            printf("\e[%sm", colors.dir);
             //m&S_IXOTH?"\e[32;1mx\e[0m":"-"
             if(sb.st_mode & S_IWOTH){
                 if(sb.st_mode & S_ISVTX)
-                    printf("\e[30;42m󰉋 %s\e[0m", dir_name);
+                    printf("\e[%sm󰉋 %s\e[0m", colors.tw, dir_name);
                 else
-                    printf("\e[34;42m󰉋 %s\e[0m", dir_name);
+                    printf("\e[%sm󰉋 %s\e[0m", colors.ow, dir_name);
             }
             else if(sb.st_mode & S_ISVTX)
-                printf("\e[37;44m󰉋 %s\e[0m", dir_name);
+                printf("\e[%sm󰉋 %s\e[0m", colors.st, dir_name);
             else if(regex_test(dir_name, "^(Downloads|Téléchargements)$") == 0)
-                printf("\e[34;1m󰉍 %s\e[0m", dir_name);
+                printf("󰉍 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^Documents$") == 0)
-                printf("\e[34;1m󰝰 %s\e[0m", dir_name);
+                printf("󰝰 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^Pictures|Images$") == 0)
-                printf("\e[34;1m󰉏 %s\e[0m", dir_name);
+                printf("󰉏 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Templates|Modèles)$") == 0)
-                printf("\e[34;1m󱋣 %s\e[0m", dir_name);
+                printf("󱋣 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Videos|Vidéos)$") == 0)
-                printf("\e[34;1m󱧺 %s\e[0m", dir_name);
+                printf("󱧺 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Music|Musique)$") == 0)
-                printf("\e[34;1m󱍙 %s\e[0m", dir_name);
+                printf("󱍙 %s\e[0m", dir_name);
             else if(regex_test(dir_name, "^(Desktop|Bureau)$") == 0)
-                printf("\e[34;1m󱂵 %s\e[0m", dir_name);
+                printf("󱂵 %s\e[0m", dir_name);
             else
-                printf("\e[34;1m󰉋 %s\e[0m", dir_name);
+                printf("󰉋 %s\e[0m", dir_name);
             break;
         // FIFO
         case S_IFIFO:
-            printf("\e[33;40m󰈲 %s\e[0m", dir_name);
+            printf("\e[%sm󰈲 %s\e[0m", colors.fifo, dir_name);
             break;
         // Symlink
         case S_IFLNK:
@@ -288,7 +280,7 @@ void print_file(char* dir_name, struct stat sb){
             struct stat sb2;
             if (res) { // or: if (res != NULL)
                 //printf("%s", res);
-                printf("\e[36;1m󰉒 %s\e[0m", dir_name);
+                printf("\e[%sm󰉒 %s\e[0m", colors.lnk, dir_name);
                 if(op_l){
                     printf(" 󰜴 ");
                     stat(res, &sb2);
@@ -296,18 +288,18 @@ void print_file(char* dir_name, struct stat sb){
                 }
             }
             else {
-                printf("\e[40;31;01m󰉒 %s\e[0m", dir_name);
+                printf("\e[%sm󰉒 %s\e[0m", colors.lnk_broken, dir_name);
             }
             //stat(file_path, &sb);
             
             break;
         // Socket
         case S_IFSOCK:
-            printf("\e[35;1m󰆨 %s\e[0m", dir_name);
+            printf("\e[%s󰆨 %s\e[0m", colors.socket, dir_name);
             break;
         // Regular file
         case S_IFREG:
-            if (sb.st_mode & S_IXUSR) printf("\e[32;1m󰆍 %s\e[33;0m", dir_name);
+            if (sb.st_mode & S_IXUSR) printf("\e[%sm󰆍 %s\e[0m", colors.exec, dir_name);
 /*
 LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;
 01:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;
@@ -326,52 +318,53 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
 *.spx=00;36:*.xspf=00;36:';
 */
             else{
+                printf("\e[%sm", colors.def);
                 // Media files
                 if(regex_test(dir_name, "\\.(jpg|jpeg|gif|bmp|pbm|pgm|ppm|tga|xbm|xpm|tif|tiff|png|svg|svgz|mng|pcx)$") == 0)
-                    printf("\e[35;1m󰋩 %s\e[0m", dir_name);
+                    printf("\e[%sm󰋩 %s\e[0m", colors.media, dir_name);
                 else if(regex_test(dir_name, "\\.(mov|mpg|mpeg|mkv|webm|ogm|mp4|m4v|mp4v)$") == 0)
-                    printf("\e[35;1m󰎁 %s\e[0m", dir_name);
+                    printf("\e[%sm󰎁 %s\e[0m", colors.media, dir_name);
                 else if(regex_test(dir_name, "\\.(vob|qt|nuv|wmv|asf|rm|rmvb|flc|avi|fli|flv|gl|dl|xcf|xwd|yuv|cgm|emf|axv|anx|ogv|ogx)$") == 0)
-                    printf("\e[35;1m󰈔 %s\e[0m", dir_name);
+                    printf("\e[%sm󰈔 %s\e[0m", colors.media, dir_name);
                 
                 // Compressed files
                 else if(regex_test(dir_name, "\\.(tar|tgz|arc|arj|taz|lha|lz4|lzh|lzma|tlz|txz|tzo|t7z|zip|z|Z|dz|gz|lrz|lz|lzo|xz|bz2|bz|tbz|tbz2|tz|deb|rpm|jar|war|ear|sar|rar|alz|ace|zoo|cpio|7z|rz|cab)$") == 0)
-                    printf("\e[01;31m󰀼 %s\e[0m", dir_name);
+                    printf("\e[%sm󰀼 %s\e[0m", colors.compressed, dir_name);
 
                 // Audio files
                 else if(regex_test(dir_name, "\\.(aac|au|flac|mid|midi|mp3|mpc|ogg|ra|wav|axa|oga|spx|xspf)$") == 0)
-                    printf("\e[00;36m %s\e[0m", dir_name);
+                    printf("\e[%sm %s\e[0m", colors.audio, dir_name);
                 // PDF
                 else if(regex_test(dir_name, "\\.(pdf)$") == 0)
-                    printf("\e[0m󰈦 %s\e[0m", dir_name);
+                    printf("󰈦 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(py|ipynb|pyc)$") == 0)
-                    printf("\e[0m󰌠 %s\e[0m", dir_name);
+                    printf("󰌠 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(doc|docx)$") == 0)
-                    printf("\e[0m󰈬 %s\e[0m", dir_name);
+                    printf("󰈬 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(xls|xlsx|csv)$") == 0)
-                    printf("\e[0m󰓫 %s\e[0m", dir_name);
+                    printf("󰓫 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(txt)$") == 0)
-                    printf("\e[0m󰈙 %s\e[0m", dir_name);
+                    printf("󰈙 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(html)$") == 0)
-                    printf("\e[0m󰌝 %s\e[0m", dir_name);
+                    printf("󰌝 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(css|scss)$") == 0)
-                    printf("\e[0m󰌜 %s\e[0m", dir_name);
+                    printf("󰌜 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(c|h)$") == 0)
-                    printf("\e[0m󰙱 %s\e[0m", dir_name);
+                    printf("󰙱 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(cpp)$") == 0)
-                    printf("\e[0m󰙲 %s\e[0m", dir_name);
+                    printf("󰙲 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(cs)$") == 0)
-                    printf("\e[0m󰌛 %s\e[0m", dir_name);
+                    printf("󰌛 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(js)$") == 0)
-                    printf("\e[0m󰌞 %s\e[0m", dir_name);
+                    printf("󰌞 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(json)$") == 0)
-                    printf("\e[0m󰘦 %s\e[0m", dir_name);
+                    printf("󰘦 %s\e[0m", dir_name);
 
                 else if(regex_test(dir_name, "^makefile$") == 0)
-                    printf("\e[0m󰒓 %s\e[0m", dir_name);
+                    printf("󰒓 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "^(README|README.md)$") == 0)
-                    printf("\e[0m󰃀 %s\e[0m", dir_name);
-                else printf("\e[0m󰈔 %s\e[0m", dir_name);
+                    printf("󰃀 %s\e[0m", dir_name);
+                else printf("󰈔 %s\e[0m", dir_name);
             }
             break;
         default:
