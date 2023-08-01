@@ -28,7 +28,7 @@ int term_width;
 lsbt_colors colors;
 
 void main(int argc, char** argv){
-    char * folders_id = "";
+    char * folders_id = malloc(200*sizeof(char));
     int nb_folder = 0; // Number of folders to list
 
     setlocale( LC_ALL, "en_US.utf8" );
@@ -60,7 +60,8 @@ void main(int argc, char** argv){
             }
             
         } else { // If there is a file or folder name
-            asprintf(&folders_id, "%s%c", folders_id, (char) i);
+            //asprintf(&folders_id, "%s%c", folders_id, '0'+i);
+            sprintf(folders_id, "%s%c", folders_id, '0'+i);
             nb_folder ++;
         }
     }
@@ -69,11 +70,11 @@ void main(int argc, char** argv){
         lsbt_folder(".", 0);
     }
     else if (nb_folder == 1){ // If one folder is past, process it
-        lsbt_folder(argv[(int)folders_id[0]], 0);
+        lsbt_folder(argv[(int)folders_id[0]-'0'], 0);
     }
     else { // Else, process all the folders and write their names
         for(int i=0; i<nb_folder; i++){
-            lsbt_folder(argv[(int)folders_id[i]], 1);
+            lsbt_folder(argv[(int)folders_id[i]-'0'], 1);
         }
     }
 
