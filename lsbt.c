@@ -95,6 +95,7 @@ void lsbt_folder(char * folder_name, int print_name){
 
     folder_cur = folder_name;
 
+
     if(stat(folder_name, &sb)==-1){
         perror(folder_name);
         printf("\n");
@@ -129,7 +130,6 @@ void lsbt_folder(char * folder_name, int print_name){
     /*
         Get listed format dimensions for formatting
     */
-    
     while (nb_cur--) {
         dir = dir_list[nb_file-nb_cur-1];
         
@@ -139,13 +139,21 @@ void lsbt_folder(char * folder_name, int print_name){
 
         if (intlen(sb.st_nlink)>dim[0]) dim[0] = intlen(sb.st_nlink);
 
-        passwd = getpwuid(sb.st_uid);  
-        if (mbStrlen(passwd->pw_name)>dim[1]) dim[1] = mbStrlen(passwd->pw_name);
+        passwd = getpwuid(sb.st_uid);
+        if(passwd == NULL)
+            if (intlen(sb.st_uid)>dim[1]) dim[1] = intlen(sb.st_uid);
+        else
+            if (mbStrlen(passwd->pw_name)>dim[1]) dim[1] = mbStrlen(passwd->pw_name);
 
         group = getgrgid(sb.st_gid);
-        if (mbStrlen(group->gr_name)>dim[2]) dim[2] = mbStrlen(group->gr_name);
+        if(group == NULL)
+            if (intlen(sb.st_gid)>dim[2]) dim[2] = intlen(sb.st_gid);
+        else
+            if (mbStrlen(group->gr_name)>dim[2]) dim[2] = mbStrlen(group->gr_name);
 
         if (intlen(sb.st_size)>dim[3]) dim[3] = intlen(sb.st_size);
+
+        free(file_path);
     }
     //printf("%d %d %d %d \n", dim[0], dim[1], dim[2], dim[3]);
 
@@ -162,6 +170,8 @@ void lsbt_folder(char * folder_name, int print_name){
             if(op_l){
                 print_file_data(dir->d_name, sb, dim);
             }
+
+            free(file_path);
         }
     }
     else {
@@ -184,6 +194,8 @@ void lsbt_folder(char * folder_name, int print_name){
                 
                 print_file(dir->d_name, sb);
                 printf("  ");
+
+                free(file_path);
             }
             printf("\n");
         }
@@ -292,7 +304,7 @@ void print_file(char* dir_name, struct stat sb){
                 printf("\e[%sm󰉒 %s\e[0m", colors.lnk_broken, dir_name);
             }
             //stat(file_path, &sb);
-            
+            free(file_path);
             break;
         // Socket
         case S_IFSOCK:
@@ -390,12 +402,23 @@ void print_file_data(char* dir_name, struct stat sb, int dim[]){
 
     // Ownership
     passwd = getpwuid(sb.st_uid);
-    printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
-    printspace(dim[1]-mbStrlen(passwd->pw_name));
-
+    if(passwd == NULL){
+        printf ("\e[1;33m%d\e[0m ", sb.st_uid);
+        printspace(dim[1]-intlen(sb.st_uid));
+    }
+    else{
+        printf ("\e[1;33m%s\e[0m ", passwd->pw_name);
+        printspace(dim[1]-mbStrlen(passwd->pw_name));
+    }
     group = getgrgid(sb.st_gid);
-    printf ("\e[0;33m%s\e[0m ", group->gr_name);
-    printspace(dim[2]-mbStrlen(group->gr_name));
+    if(group == NULL){
+        printf ("\e[0;33m%d\e[0m ", sb.st_gid);
+        printspace(dim[2]-intlen(sb.st_gid));
+    }
+    else{
+        printf ("\e[0;33m%s\e[0m ", group->gr_name);
+        printspace(dim[2]-mbStrlen(group->gr_name));
+    }
 
     //File size
     file_size = (double) sb.st_size;
@@ -563,6 +586,7 @@ void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int n
             lstat(file_path, &sb);
             print_file(dir->d_name, sb);
             if(i<(nb_c-1)) printspace(dim_c[i]-mbStrlen(dir->d_name)-2);
+            free(file_path);
         }
     }
     printf("\n");
