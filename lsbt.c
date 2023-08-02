@@ -6,6 +6,7 @@ void print_file_data(char* dir_name, struct stat sb, int dim[]);
 void print_mode(mode_t m);
 int regex_test(char * string, char * reg);
 int hidden_filter(const struct dirent *dir);
+int z_f(const struct dirent *dir);
 int get_term_width(void);
 int intlen(int n);
 void printspace(int n);
@@ -13,6 +14,7 @@ int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file);
 int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file);
 void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int num_l, int nb_file);
 size_t mbStrlen( const char * str );
+char * color_sticky(mode_t mode, char * default_color);
 
 // Units to write for list format
 char units[] = {' ', 'K', 'M', 'G', 'T'};
@@ -27,9 +29,14 @@ int term_width;
 // Colors of file's types for theming
 lsbt_colors colors;
 
+char * regex_files;
+
 void main(int argc, char** argv){
     char * folders_id = malloc(200*sizeof(char));
     int nb_folder = 0; // Number of folders to list
+
+    regex_files = malloc(10000*PATH_MAX*sizeof(char));
+    sprintf(regex_files, "^(");
 
     setlocale( LC_ALL, "en_US.utf8" );
 
@@ -114,7 +121,7 @@ void lsbt_folder(char * folder_name, int print_name){
         return;
     }
 
-    if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
+    if(op_a) nb_file = scandir(folder_name, &dir_list, z_f, alphasort);
     else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
 
     //nb_file = scandir(".", &dir_list, hidden_filter, alphasort);
@@ -140,16 +147,20 @@ void lsbt_folder(char * folder_name, int print_name){
         if (intlen(sb.st_nlink)>dim[0]) dim[0] = intlen(sb.st_nlink);
 
         passwd = getpwuid(sb.st_uid);
-        if(passwd == NULL)
+        if(passwd == NULL){
             if (intlen(sb.st_uid)>dim[1]) dim[1] = intlen(sb.st_uid);
-        else
+        }
+        else{
             if (mbStrlen(passwd->pw_name)>dim[1]) dim[1] = mbStrlen(passwd->pw_name);
+        }
 
         group = getgrgid(sb.st_gid);
-        if(group == NULL)
+        if(group == NULL){
             if (intlen(sb.st_gid)>dim[2]) dim[2] = intlen(sb.st_gid);
-        else
+        }
+        else{
             if (mbStrlen(group->gr_name)>dim[2]) dim[2] = mbStrlen(group->gr_name);
+        }
 
         if (intlen(sb.st_size)>dim[3]) dim[3] = intlen(sb.st_size);
 
@@ -240,6 +251,7 @@ void lsbt_folder(char * folder_name, int print_name){
 }
 
 void print_file(char* dir_name, struct stat sb){
+
     switch (sb.st_mode & S_IFMT) {
         
         // Block
@@ -312,7 +324,10 @@ void print_file(char* dir_name, struct stat sb){
             break;
         // Regular file
         case S_IFREG:
-            if (sb.st_mode & S_IXUSR) printf("\e[%sm󰆍 %s\e[0m", colors.exec, dir_name);
+            if ( (sb.st_mode&S_IXUSR) || (sb.st_mode&S_IXGRP) || (sb.st_mode&S_IXOTH))
+                printf("\e[%sm󰆍 %s\e[0m", color_sticky(sb.st_mode, colors.exec), dir_name);
+            
+            
 /*
 LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;
 01:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;
@@ -331,22 +346,23 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
 *.spx=00;36:*.xspf=00;36:';
 */
             else{
-                printf("\e[%sm", colors.def);
+                printf("\e[%sm", color_sticky(sb.st_mode, colors.def));
                 // Media files
                 if(regex_test(dir_name, "\\.(jpg|jpeg|gif|bmp|pbm|pgm|ppm|tga|xbm|xpm|tif|tiff|png|svg|svgz|mng|pcx)$") == 0)
-                    printf("\e[%sm󰋩 %s\e[0m", colors.media, dir_name);
+                    printf("\e[%sm󰋩 %s\e[0m", color_sticky(sb.st_mode, colors.media), dir_name);
+                    //printf("\e[%sm󰋩 %s\e[0m", colors.media, dir_name);
                 else if(regex_test(dir_name, "\\.(mov|mpg|mpeg|mkv|webm|ogm|mp4|m4v|mp4v)$") == 0)
-                    printf("\e[%sm󰎁 %s\e[0m", colors.media, dir_name);
+                    printf("\e[%sm󰎁 %s\e[0m", color_sticky(sb.st_mode, colors.media), dir_name);
                 else if(regex_test(dir_name, "\\.(vob|qt|nuv|wmv|asf|rm|rmvb|flc|avi|fli|flv|gl|dl|xcf|xwd|yuv|cgm|emf|axv|anx|ogv|ogx)$") == 0)
-                    printf("\e[%sm󰈔 %s\e[0m", colors.media, dir_name);
+                    printf("\e[%sm󰈔 %s\e[0m", color_sticky(sb.st_mode, colors.media), dir_name);
                 
                 // Compressed files
                 else if(regex_test(dir_name, "\\.(tar|tgz|arc|arj|taz|lha|lz4|lzh|lzma|tlz|txz|tzo|t7z|zip|z|Z|dz|gz|lrz|lz|lzo|xz|bz2|bz|tbz|tbz2|tz|deb|rpm|jar|war|ear|sar|rar|alz|ace|zoo|cpio|7z|rz|cab)$") == 0)
-                    printf("\e[%sm󰀼 %s\e[0m", colors.compressed, dir_name);
+                    printf("\e[%sm󰀼 %s\e[0m", color_sticky(sb.st_mode, colors.compressed), dir_name);
 
                 // Audio files
                 else if(regex_test(dir_name, "\\.(aac|au|flac|mid|midi|mp3|mpc|ogg|ra|wav|axa|oga|spx|xspf)$") == 0)
-                    printf("\e[%sm %s\e[0m", colors.audio, dir_name);
+                    printf("\e[%sm %s\e[0m", color_sticky(sb.st_mode, colors.audio), dir_name);
                 // PDF
                 else if(regex_test(dir_name, "\\.(pdf)$") == 0)
                     printf("󰈦 %s\e[0m", dir_name);
@@ -479,12 +495,30 @@ void print_mode(mode_t m){
     // users
     printf(m&S_IRUSR?"\e[32;1mr\e[0m":"-");
     printf(m&S_IWUSR?"\e[32;1mw\e[0m":"-");
-    printf(m&S_IXUSR?"\e[32;1mx\e[0m":"-");
-
+    //printf(m&S_IXUSR?"\e[32;1mx\e[0m":"-");
+    if(m&S_IXUSR){
+        if(m&S_ISUID)
+            printf("\e[32;1ms\e[0m");
+        else
+            printf("\e[32;1mx\e[0m");
+    } else if(m&S_ISUID)
+        printf("\e[32;1mS\e[0m");
+    else
+        printf("-");
+    
     // group
     printf(m&S_IRGRP?"\e[32;1mr\e[0m":"-");
     printf(m&S_IWGRP?"\e[32;1mw\e[0m":"-");
-    printf(m&S_IXGRP?"\e[32;1mx\e[0m":"-");
+    //printf(m&S_IXGRP?"\e[32;1mx\e[0m":"-");
+    if(m&S_IXGRP){
+        if(m&S_ISGID)
+            printf("\e[32;1ms\e[0m");
+        else
+            printf("\e[32;1mx\e[0m");
+    } else if(m&S_ISGID)
+        printf("\e[32;1mS\e[0m");
+    else
+        printf("-");
 
     //Other
     printf(m&S_IROTH?"\e[32;1mr\e[0m":"-");
@@ -502,6 +536,9 @@ void print_mode(mode_t m){
 //            if(sb.st_mode &S_IWOTH){
 //                if(sb.st_mode &S_ISVTX)
     printf(" ");
+
+    //printf(m&S_ISGID?"S":"-");
+    //printf(m&S_ISUID?"S":"-");
 }
 
 int regex_test(char * string, char * reg){
@@ -517,6 +554,10 @@ int regex_test(char * string, char * reg){
     value_res = regexec(&regE, string, 0, NULL, 0);
 
     return value_res;
+}
+
+int z_f(const struct dirent *dir){
+    return (!regex_test((char *) dir->d_name, "^(zipnote|zforce)$"));
 }
 
 int hidden_filter(const struct dirent *dir){
@@ -621,4 +662,8 @@ size_t mbStrlen( const char * str ) {
     }
 
     return result;
+}
+
+char * color_sticky(mode_t mode, char * default_color){
+    return mode&S_ISUID?colors.sticky_user:mode&S_ISGID?colors.sticky_group:default_color;
 }

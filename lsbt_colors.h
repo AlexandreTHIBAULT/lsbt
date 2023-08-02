@@ -17,7 +17,7 @@
 #include <limits.h>
 #include <stdio.h>
 
-#define DEFCOLORS "def\n0\n\ndir\n34;1\n\ntw\n30;42\n\now\n34;42\n\nst\n37;44\n\nblk\n33;40\n\nchara\n33;40\n\nfifo\n33;40\n\nsocket\n35;1\n\nlnk\n36;1\n\nlnk_broken\n40;31;01\n\nexec\n32;1\n\nmedia\n35;1\n\ncompressed\n01;31\n\naudio\n00;36"
+#define DEFCOLORS "def\n0\n\ndir\n34;1\n\ntw\n30;42\n\now\n34;42\n\nst\n37;44\n\nblk\n33;40\n\nchara\n33;40\n\nfifo\n33;40\n\nsocket\n35;1\n\nlnk\n36;1\n\nlnk_broken\n40;31;01\n\nexec\n32;1\n\nmedia\n35;1\n\ncompressed\n01;31\n\naudio\n00;36\n\nsticky_user\n41;37\n\nsticky_group\n43;30"
 
 typedef struct lsbt_colors
 {
@@ -36,6 +36,8 @@ typedef struct lsbt_colors
     char media[10];
     char compressed[10];
     char audio[10];
+    char sticky_user[10];
+    char sticky_group[10];
 } lsbt_colors;
 
 ssize_t getlinenum(char ** lineptr, size_t * n, FILE * stream, int * linenb){
@@ -153,6 +155,14 @@ lsbt_colors get_colors(){
         else if(strcmp(line, "audio")==0){
             read = getlinenum(&line, &len, fp, &l);
             sprintf(colors.audio, "%s", line);
+        }
+        else if(strcmp(line, "sticky_user")==0){
+            read = getlinenum(&line, &len, fp, &l);
+            sprintf(colors.sticky_user, "%s", line);
+        }
+        else if(strcmp(line, "sticky_group")==0){
+            read = getlinenum(&line, &len, fp, &l);
+            sprintf(colors.sticky_group, "%s", line);
         }
         
     }
