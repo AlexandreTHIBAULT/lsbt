@@ -8,7 +8,7 @@ int regex_test(char * string, char * reg);
 int hidden_filter(const struct dirent *dir);
 int z_f(const struct dirent *dir);
 int get_term_width(void);
-int intlen(int n);
+int intlen(long n);
 void printspace(int n);
 int width_lines(struct dirent **dir_list, int nb_c, int nb_l, int nb_file);
 int width_column(struct dirent **dir_list, int nb_c, int nb_l, int num_c, int nb_file);
@@ -30,6 +30,8 @@ int term_width;
 lsbt_colors colors;
 
 char * regex_files;
+
+int is_file = 0;
 
 void main(int argc, char** argv){
     char * folders_id = malloc(200*sizeof(char));
@@ -103,12 +105,13 @@ void lsbt_folder(char * folder_name, int print_name){
     folder_cur = folder_name;
 
 
-    if(stat(folder_name, &sb)==-1){
+    if(lstat(folder_name, &sb)==-1){
         perror(folder_name);
         printf("\n");
         return;
     }
     if(!S_ISDIR(sb.st_mode)){
+        is_file = 1;
         if(op_l){
             print_file_data(folder_name, sb, dim);
             printf("\n");
@@ -120,6 +123,7 @@ void lsbt_folder(char * folder_name, int print_name){
         
         return;
     }
+    is_file = 0;
 
     if(op_a) nb_file = scandir(folder_name, &dir_list, z_f, alphasort);
     else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
@@ -300,8 +304,14 @@ void print_file(char* dir_name, struct stat sb){
             
             //char buf[PATH_MAX];
             char * file_path =malloc((strlen(folder_cur)+strlen(dir_name)+2)*sizeof(char));
-            sprintf(file_path, "%s/%s", folder_cur, dir_name);
-            char *res = realpath(file_path, NULL);
+            char * res;
+
+            if (is_file)
+                res = realpath(dir_name, NULL);
+            else{
+                sprintf(file_path, "%s/%s", folder_cur, dir_name);
+                res = realpath(file_path, NULL);
+            }
             struct stat sb2;
             if (res) { // or: if (res != NULL)
                 //printf("%s", res);
@@ -437,7 +447,7 @@ void print_file_data(char* dir_name, struct stat sb, int dim[]){
     }
 
     //File size
-    file_size = (double) sb.st_size;
+    file_size = sb.st_size;
     
     printf("\e[0;35m");
     if(op_h){
@@ -571,9 +581,9 @@ int get_term_width(void){
     return (int) ws.ws_col;
 }
 
-int intlen(int n){
+int intlen(long n){
     if (n==0) return 1;
-    return floor(log10((double) abs(n))) + 1;
+    return floor(log10((double) n)) + 1;
 }
 
 void printspace(int n){
