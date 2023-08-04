@@ -196,7 +196,6 @@ void lsbt_folder(char * folder_name, int print_name){
         printf("%s:\nPermission non accordée\n\n", folder_name);
         if(isN){
             free(folder_name);
-            //free(dir_list);
         }
         return;
     }
