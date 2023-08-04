@@ -6,7 +6,7 @@ void print_file_data(char* dir_name, struct stat sb, int dim[]);
 void print_mode(mode_t m);
 int regex_test(char * string, char * reg);
 int hidden_filter(const struct dirent *dir);
-int z_f(const struct dirent *dir);
+//int z_f(const struct dirent *dir);
 int get_term_width(void);
 int intlen(long n);
 void printspace(int n);
@@ -37,7 +37,7 @@ struct dirent **file_list;
 int file_list_nb = 0;
 
 void main(int argc, char** argv){
-    char * folders_id = malloc(255*sizeof(char));
+    int * folders_id = malloc(10000000*sizeof(int));
     int nb_folder = 0; // Number of folders to list
 
     //regex_files = malloc(10000*PATH_MAX*sizeof(char));
@@ -73,11 +73,13 @@ void main(int argc, char** argv){
             
         } else { // If there is a file or folder name
             //asprintf(&folders_id, "%s%c", folders_id, '0'+i);
-            sprintf(folders_id, "%s%c", folders_id, i);
+            folders_id[nb_folder] = i;
+            //folders_id[nb_folder+1] = malloc(sizeof(int)*2);
+            //sprintf(folders_id, "%s%c", folders_id, i);
             nb_folder ++;
         }
     }
-
+    //printf("ok\n");
     if(nb_folder == 0){ // If no folder is past, process the current one
         lsbt_folder(".", 0);
     }
@@ -88,9 +90,7 @@ void main(int argc, char** argv){
         struct dirent * fileD;
 
         fileD = (struct dirent *) malloc(sizeof(struct dirent));
-
-        
-        file_list = (struct dirent **) malloc(sizeof(struct dirent)*2);
+        file_list = (struct dirent **) malloc(sizeof(struct dirent)*10000);
 
         for(int i=0; i<nb_folder; i++){
             struct stat sb;
@@ -102,11 +102,12 @@ void main(int argc, char** argv){
             if(!S_ISDIR(sb.st_mode)){
                 strcpy(fileD->d_name, argv[(int)folders_id[i]]);
                 file_list[file_list_nb++] = fileD;
-                file_list[file_list_nb+1] = malloc(sizeof(struct dirent)*2);           
+                //file_list[file_list_nb] = malloc(sizeof(struct dirent)*2);           
                 fileD = (struct dirent *) malloc(sizeof(struct dirent));
             }
-            else
-                lsbt_folder(argv[(int)folders_id[i]], 1);
+            /*else
+                lsbt_folder(argv[(int)folders_id[i]], 1);*/
+                
         }
         
         /*for(int i=0; i<file_list_nb; i++){
@@ -116,9 +117,24 @@ void main(int argc, char** argv){
         if(file_list_nb){
             lsbt_folder(NULL, 0);
         }
+
+        for(int i=0; i<nb_folder; i++){
+            struct stat sb;
+            if(lstat(argv[(int)folders_id[i]], &sb)==-1){
+                perror(argv[(int)folders_id[i]]);
+                printf("\n");
+                return;
+            }
+            if(S_ISDIR(sb.st_mode))
+                lsbt_folder(argv[(int)folders_id[i]], 1);
+                
+        }
+
+        free(fileD);
     }
 
     free(folders_id);
+    free(file_list);
 }
 
 // List the folder
@@ -133,8 +149,15 @@ void lsbt_folder(char * folder_name, int print_name){
 
     int dim[4] = {0, 0, 0, 0};
 
-    if(folder_name != NULL){
+    int isN = (folder_name != NULL);
+
+    if(isN){
         folder_cur = folder_name;
+
+        folder_name = malloc(strlen(folder_name)*sizeof(char));
+        sprintf(folder_name, "%s/", folder_cur);
+        folder_cur = folder_name;
+
         
         if(lstat(folder_name, &sb)==-1){
             perror(folder_name);
@@ -156,7 +179,7 @@ void lsbt_folder(char * folder_name, int print_name){
         }
         is_file = 0;
 
-        if(op_a) nb_file = scandir(folder_name, &dir_list, z_f, alphasort);
+        if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
         else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
 
     }
@@ -164,14 +187,14 @@ void lsbt_folder(char * folder_name, int print_name){
         nb_file = file_list_nb;
         dir_list = file_list;
 
-        folder_name = ".";
+        folder_name = "";
         folder_cur = folder_name;
     }
 
     //nb_file = scandir(".", &dir_list, hidden_filter, alphasort);
     if (nb_file == -1) {
-        perror("lsbt");
-        exit(EXIT_FAILURE);
+        printf("%s:\nPermission non accordée\n\n", folder_name);
+        return;
     }
 
     nb_cur = nb_file;
@@ -185,7 +208,7 @@ void lsbt_folder(char * folder_name, int print_name){
         dir = dir_list[nb_file-nb_cur-1];
 
         char * file_path = malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
-        sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+        sprintf(file_path, "%s%s", folder_name, dir->d_name);
         lstat(file_path, &sb);
 
         if (intlen(sb.st_nlink)>dim[0]) dim[0] = intlen(sb.st_nlink);
@@ -219,7 +242,7 @@ void lsbt_folder(char * folder_name, int print_name){
             
             char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
             
-            sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+            sprintf(file_path, "%s%s", folder_name, dir->d_name);
             lstat(file_path, &sb);
 
             if(op_l){
@@ -244,7 +267,7 @@ void lsbt_folder(char * folder_name, int print_name){
             while (nb_cur--) {
                 dir = dir_list[nb_file-nb_cur-1];
                 char * file_path =malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
-                sprintf(file_path, "%s/%s", folder_name, dir->d_name);
+                sprintf(file_path, "%s%s", folder_name, dir->d_name);
                 lstat(file_path, &sb);
                 
                 print_file(dir->d_name, sb);
@@ -292,6 +315,8 @@ void lsbt_folder(char * folder_name, int print_name){
     }
 
     printf("\n");
+    
+    if(isN) free(folder_name);
 }
 
 void print_file(char* dir_name, struct stat sb){
@@ -348,7 +373,7 @@ void print_file(char* dir_name, struct stat sb){
             if (is_file)
                 res = realpath(dir_name, NULL);
             else{
-                sprintf(file_path, "%s/%s", folder_cur, dir_name);
+                sprintf(file_path, "%s%s", folder_cur, dir_name);
                 res = realpath(file_path, NULL);
             }
             struct stat sb2;
@@ -366,6 +391,7 @@ void print_file(char* dir_name, struct stat sb){
             }
             //stat(file_path, &sb);
             free(file_path);
+            free(res);
             break;
         // Socket
         case S_IFSOCK:
@@ -605,10 +631,6 @@ int regex_test(char * string, char * reg){
     return value_res;
 }
 
-int z_f(const struct dirent *dir){
-    return (!regex_test((char *) dir->d_name, "^(zipnote|zforce)$"));
-}
-
 int hidden_filter(const struct dirent *dir){
     return (regex_test((char *) dir->d_name, "^\\."));
 }
@@ -616,7 +638,6 @@ int hidden_filter(const struct dirent *dir){
 int get_term_width(void){
     struct winsize ws;
     ioctl(STDIN_FILENO, TIOCGWINSZ, &ws);
-    //printf("columns %d\n", ws.ws_col);
     return (int) ws.ws_col;
 }
 
@@ -671,7 +692,7 @@ void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int n
         if((i*nb_l+num_l)<nb_file){
             dir = dir_list[i*nb_l+num_l];
             char * file_path =malloc((strlen(folder_cur)+strlen(dir->d_name)+2)*sizeof(char));
-            sprintf(file_path, "%s/%s", folder_cur, dir->d_name);
+            sprintf(file_path, "%s%s", folder_cur, dir->d_name);
             //printf("\n--%s--\n",file_path);
             lstat(file_path, &sb);
             print_file(dir->d_name, sb);
@@ -695,6 +716,7 @@ size_t mbStrlen( const char * str ) {
         if ( nbChars == -1 ) {
             fprintf( stderr, "On ne peut pas décoder la chaîne.\n" );
             fprintf( stderr, "Vérifiez votre localisation (fonction setlocale).\n" );
+            //return 0;
             exit( -1 );
         }
 
