@@ -49,6 +49,8 @@ ssize_t getlinenum(char ** lineptr, size_t * n, FILE * stream, int * linenb){
         (*linenb)++;
     }
     (*lineptr)[strcspn((*lineptr), "\n")] = 0;
+
+    
     return read;
 }
 
@@ -166,6 +168,9 @@ lsbt_colors get_colors(){
         }
         
     }
+
+    free(file);
+    free(line);
 
     return colors;
 }
