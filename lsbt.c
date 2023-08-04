@@ -29,16 +29,19 @@ int term_width;
 // Colors of file's types for theming
 lsbt_colors colors;
 
-char * regex_files;
+//char * regex_files;
 
 int is_file = 0;
 
+struct dirent **file_list;
+int file_list_nb = 0;
+
 void main(int argc, char** argv){
-    char * folders_id = malloc(200*sizeof(char));
+    char * folders_id = malloc(255*sizeof(char));
     int nb_folder = 0; // Number of folders to list
 
-    regex_files = malloc(10000*PATH_MAX*sizeof(char));
-    sprintf(regex_files, "^(");
+    //regex_files = malloc(10000*PATH_MAX*sizeof(char));
+    //sprintf(regex_files, "^(");
 
     setlocale( LC_ALL, "en_US.utf8" );
 
@@ -70,7 +73,7 @@ void main(int argc, char** argv){
             
         } else { // If there is a file or folder name
             //asprintf(&folders_id, "%s%c", folders_id, '0'+i);
-            sprintf(folders_id, "%s%c", folders_id, '0'+i);
+            sprintf(folders_id, "%s%c", folders_id, i);
             nb_folder ++;
         }
     }
@@ -79,11 +82,39 @@ void main(int argc, char** argv){
         lsbt_folder(".", 0);
     }
     else if (nb_folder == 1){ // If one folder is past, process it
-        lsbt_folder(argv[(int)folders_id[0]-'0'], 0);
+        lsbt_folder(argv[(int)folders_id[0]], 0);
     }
     else { // Else, process all the folders and write their names
+        struct dirent * fileD;
+
+        fileD = (struct dirent *) malloc(sizeof(struct dirent));
+
+        
+        file_list = (struct dirent **) malloc(sizeof(struct dirent)*2);
+
         for(int i=0; i<nb_folder; i++){
-            lsbt_folder(argv[(int)folders_id[i]-'0'], 1);
+            struct stat sb;
+            if(lstat(argv[(int)folders_id[i]], &sb)==-1){
+                perror(argv[(int)folders_id[i]]);
+                printf("\n");
+                return;
+            }
+            if(!S_ISDIR(sb.st_mode)){
+                strcpy(fileD->d_name, argv[(int)folders_id[i]]);
+                file_list[file_list_nb++] = fileD;
+                file_list[file_list_nb+1] = malloc(sizeof(struct dirent)*2);           
+                fileD = (struct dirent *) malloc(sizeof(struct dirent));
+            }
+            else
+                lsbt_folder(argv[(int)folders_id[i]], 1);
+        }
+        
+        /*for(int i=0; i<file_list_nb; i++){
+            printf("%s\n", file_list[i]->d_name);
+        }*/
+
+        if(file_list_nb){
+            lsbt_folder(NULL, 0);
         }
     }
 
@@ -102,31 +133,40 @@ void lsbt_folder(char * folder_name, int print_name){
 
     int dim[4] = {0, 0, 0, 0};
 
-    folder_cur = folder_name;
-
-
-    if(lstat(folder_name, &sb)==-1){
-        perror(folder_name);
-        printf("\n");
-        return;
-    }
-    if(!S_ISDIR(sb.st_mode)){
-        is_file = 1;
-        if(op_l){
-            print_file_data(folder_name, sb, dim);
-            printf("\n");
-        }
-        else{
-            print_file(folder_name, sb);
-            printf("\n\n");
-        }
+    if(folder_name != NULL){
+        folder_cur = folder_name;
         
-        return;
-    }
-    is_file = 0;
+        if(lstat(folder_name, &sb)==-1){
+            perror(folder_name);
+            printf("\n");
+            return;
+        }
+        if(!S_ISDIR(sb.st_mode)){
+            is_file = 1;
+            if(op_l){
+                print_file_data(folder_name, sb, dim);
+                printf("\n");
+            }
+            else{
+                print_file(folder_name, sb);
+                printf("\n\n");
+            }
+            
+            return;
+        }
+        is_file = 0;
 
-    if(op_a) nb_file = scandir(folder_name, &dir_list, z_f, alphasort);
-    else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
+        if(op_a) nb_file = scandir(folder_name, &dir_list, z_f, alphasort);
+        else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
+
+    }
+    else {
+        nb_file = file_list_nb;
+        dir_list = file_list;
+
+        folder_name = ".";
+        folder_cur = folder_name;
+    }
 
     //nb_file = scandir(".", &dir_list, hidden_filter, alphasort);
     if (nb_file == -1) {
@@ -143,7 +183,7 @@ void lsbt_folder(char * folder_name, int print_name){
     */
     while (nb_cur--) {
         dir = dir_list[nb_file-nb_cur-1];
-        
+
         char * file_path = malloc((strlen(folder_name)+strlen(dir->d_name)+2)*sizeof(char));
         sprintf(file_path, "%s/%s", folder_name, dir->d_name);
         lstat(file_path, &sb);
@@ -255,7 +295,6 @@ void lsbt_folder(char * folder_name, int print_name){
 }
 
 void print_file(char* dir_name, struct stat sb){
-
     switch (sb.st_mode & S_IFMT) {
         
         // Block
