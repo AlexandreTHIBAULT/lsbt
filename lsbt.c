@@ -1,5 +1,22 @@
 #include "lsbt_colors.h"
 
+#define HELP "\
+\e[33;1mlsbt\e[0m 0.0.1\n\
+An ls command with colors and things.\n\
+\n\
+\e[36;1mUSAGE:\e[0m\n\
+    \e[33;1mlsbt\e[0m \e[34;1m[OPTIONS] [FILE]\e[0m...\n\
+\n\
+\e[36;1mARGS:\e[0m\n\
+    <FILE>...    [default: .]\n\
+\n\
+\e[36;1mOPTIONS:\e[0m\n\
+    -\e[34;1ma\e[0m, --\e[34;1mall\e[0m               Do not ignore entries starting with .\n\
+    -\e[34;1mh\e[0m, --\e[34;1mhuman-readable\e[0m    For ls compatibility purposes ONLY, currently set by default\n\
+        --\e[34;1mheader\e[0m            Display block headers\n\
+    -\e[34;1ml\e[0m, --\e[34;1mlong\e[0m              Display extended file metadata as a table\n\
+"
+
 void lsbt_folder(char * folder_name, int print_name);
 void print_file(char* dir_name, struct stat sb);
 void print_file_data(char* dir_name, struct stat sb, int dim[]);
@@ -16,13 +33,15 @@ void print_line(struct dirent **dir_list, int dim_c[], int nb_c, int nb_l, int n
 size_t mbStrlen( const char * str );
 char * color_sticky(mode_t mode, char * default_color);
 
+int scansort (const struct dirent **__e1, const struct dirent **__e2);
+
 // Units to write for list format
 char units[] = {' ', 'K', 'M', 'G', 'T'};
 
 char * folder_cur;
 
 // Var for command options
-int op_a = 0, op_l = 0, op_h = 0;
+int op_a = 0, op_l = 0, op_h = 0, op_r = 0, op_U = 0;
 
 int term_width;
 
@@ -52,23 +71,62 @@ void main(int argc, char** argv){
     for(int i=1; i<argc; i++){
         
         if (argv[i][0] == '-'){ // If there is an option
-
+            /*
+            -a, --all               Do not ignore entries starting with .
+            -h, --human-readable    For ls compatibility purposes ONLY, currently set by default
+                --header            Display block headers
+            -l, --long              Display extended file metadata as a table
+            */
             char *p = (char*)(argv[i] + 1);
-            while(*p){
-                if(*p == 'a'){
+            if(*p == '-'){
+                //printf("%s\n", argv[i]);
+                if(!strcmp(argv[i], "--all")){
                     op_a = 1;
                 }
-                else if(*p == 'l'){
+                else if(!strcmp(argv[i], "--long")){
                     op_l = 1;
                 }
-                else if(*p == 'h'){
+                else if(!strcmp(argv[i], "--human-readable")){
                     op_h = 1;
                 }
+                else if(!strcmp(argv[i], "--help")){
+                    printf(HELP);
+                    return;
+                }
+                else if(!strcmp(argv[i], "--reverse")){
+                    op_r = 1;
+                }
+                else if(!strcmp(argv[i], "--no-sort")){
+                    op_U = 1;
+                }
                 else{
-                    printf("-%c: Option not available", *p);
+                    printf("%s: Option not available", argv[i]);
                     exit(EXIT_FAILURE);
                 }
-                p++;
+            }
+            else{
+                while(*p){
+                    if(*p == 'a'){
+                        op_a = 1;
+                    }
+                    else if(*p == 'l'){
+                        op_l = 1;
+                    }
+                    else if(*p == 'h'){
+                        op_h = 1;
+                    }
+                    else if(*p == 'r'){
+                        op_r = 1;
+                    }
+                    else if(*p == 'U'){
+                        op_U = 1;
+                    }
+                    else{
+                        printf("-%c: Option not available", *p);
+                        exit(EXIT_FAILURE);
+                    }
+                    p++;
+                }
             }
             
         } else { // If there is a file or folder name
@@ -179,8 +237,8 @@ void lsbt_folder(char * folder_name, int print_name){
         }
         is_file = 0;
 
-        if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, alphasort);
-        else nb_file = scandir(folder_name, &dir_list, hidden_filter, alphasort);
+        if(op_a) nb_file = scandir(folder_name, &dir_list, NULL, scansort);
+        else nb_file = scandir(folder_name, &dir_list, hidden_filter, scansort);
 
     }
     else {
@@ -749,4 +807,14 @@ size_t mbStrlen( const char * str ) {
 
 char * color_sticky(mode_t mode, char * default_color){
     return mode&S_ISUID?colors.sticky_user:mode&S_ISGID?colors.sticky_group:default_color;
+}
+
+int scansort (const struct dirent **e1, const struct dirent **e2){
+    int alph;
+
+    if(op_U) alph=1;
+    else alph=alphasort(e1, e2);
+    
+    if(op_r) return alph*-1;
+    else return alph;
 }
