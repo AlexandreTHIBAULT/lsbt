@@ -460,7 +460,7 @@ void print_file(char* dir_name, struct stat sb){
             break;
         // Socket
         case S_IFSOCK:
-            printf("\e[%s󰆨 %s\e[0m", colors.socket, dir_name);
+            printf("\e[%sm󰆨 %s\e[0m", colors.socket, dir_name);
             break;
         // Regular file
         case S_IFREG:
