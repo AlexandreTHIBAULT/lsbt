@@ -12,9 +12,11 @@ An ls command with colors and things.\n\
 \n\
 \e[36;1mOPTIONS:\e[0m\n\
     -\e[34;1ma\e[0m, --\e[34;1mall\e[0m               Do not ignore entries starting with .\n\
-    -\e[34;1mh\e[0m, --\e[34;1mhuman-readable\e[0m    For ls compatibility purposes ONLY, currently set by default\n\
-        --\e[34;1mheader\e[0m            Display block headers\n\
+    -\e[34;1mh\e[0m, --\e[34;1mhuman-readable\e[0m    With -l, print sizes like 1 KB, 234 MB, 2 GB etc.\n\
+        --\e[34;1mhelp\e[0m              Print help information\n\
     -\e[34;1ml\e[0m, --\e[34;1mlong\e[0m              Display extended file metadata as a table\n\
+    -\e[34;1mr\e[0m, --\e[34;1mreverse\e[0m           Reverse order while sorting\n\
+    -\e[34;1mU\e[0m, --\e[34;1mno-sort\e[0m           Do not sort. List entries in directory order\n\
 "
 
 void lsbt_folder(char * folder_name, int print_name);
@@ -71,12 +73,6 @@ void main(int argc, char** argv){
     for(int i=1; i<argc; i++){
         
         if (argv[i][0] == '-'){ // If there is an option
-            /*
-            -a, --all               Do not ignore entries starting with .
-            -h, --human-readable    For ls compatibility purposes ONLY, currently set by default
-                --header            Display block headers
-            -l, --long              Display extended file metadata as a table
-            */
             char *p = (char*)(argv[i] + 1);
             if(*p == '-'){
                 //printf("%s\n", argv[i]);
