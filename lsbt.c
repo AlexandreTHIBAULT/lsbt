@@ -518,7 +518,7 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
                     printf("󰌝 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(css|scss)$") == 0)
                     printf("󰌜 %s\e[0m", dir_name);
-                else if(regex_test(dir_name, "\\.(c|h)$") == 0)
+                else if(regex_test(dir_name, "\\.(c|h|o)$") == 0)
                     printf("󰙱 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(cpp)$") == 0)
                     printf("󰙲 %s\e[0m", dir_name);
@@ -528,6 +528,10 @@ LS_COLORS='rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:c
                     printf("󰌞 %s\e[0m", dir_name);
                 else if(regex_test(dir_name, "\\.(json)$") == 0)
                     printf("󰘦 %s\e[0m", dir_name);
+                else if(regex_test(dir_name, "\\.(java)$") == 0)
+                    printf("󰬷 %s\e[0m", dir_name);
+                else if(regex_test(dir_name, "\\.(sql)$") == 0)
+                    printf("󰆼 %s\e[0m", dir_name);
 
                 else if(regex_test(dir_name, "^makefile$") == 0)
                     printf("󰒓 %s\e[0m", dir_name);
